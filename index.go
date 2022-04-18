@@ -48,6 +48,17 @@ func (s *Service) GetObject(ctx context.Context, req *GetObjectRequest) (*GetObj
 	return &GetObjectResponse{Object: obj}, nil
 }
 
+type UpdateObjectRequest struct {
+	ID      string
+	Content []byte
+}
+
+type UpdateObjectResponse struct{}
+
+func (s *Service) UpdateObject(ctx context.Context, req *UpdateObjectRequest) (*UpdateObjectResponse, error) {
+	return nil, s.objDB.Update(ctx, req.ID, req.Content)
+}
+
 type GetMetadataRequest struct {
 	ID string
 }

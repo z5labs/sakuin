@@ -42,7 +42,6 @@ var (
 // @license.name  MIT
 // @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
 
-// @host      localhost:8080
 // @BasePath  /
 // @schemes   http https
 
@@ -75,10 +74,10 @@ func NewServer(s *sakuin.Service, cfg ...fiber.Config) *fiber.App {
 
 // NewGetObjectHandler godoc
 // @Summary  Retrieve an object.
-// @Tags     v1
+// @Tags     Objects
 // @Accept   json
 // @Produce  application/zip
-// @Param    id path string true "Object ID"
+// @Param    id  path  string  true  "Object ID"
 // @Router   /index/{id}/object [get]
 func NewGetObjectHandler(s *sakuin.Service) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -106,9 +105,11 @@ func NewGetObjectHandler(s *sakuin.Service) fiber.Handler {
 
 // NewUpdateObjectHandler godoc
 // @Summary  Update an object by id. This will completely replace an objects contents.
-// @Tags     v1
-// @Accept 	 */*
-// @Param    id path string true "Object ID"
+// @Tags     Objects
+// @Accept   */*
+// @Success  200  "Successfully updated object to new content."
+// @Failure  500  {object}  APIError
+// @Param    id   path      string  true  "Object ID"
 // @Router   /index/{id}/object [put]
 func NewUpdateObjectHandler(s *sakuin.Service) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -135,11 +136,11 @@ func NewUpdateObjectHandler(s *sakuin.Service) fiber.Handler {
 
 // NewGetMetadataHandler godoc
 // @Summary  Retrieve metadata for an object.
-// @Tags     v1
+// @Tags     Metadata
 // @Accept   json
 // @Produce  json
 // @Success  200  {object}  map[string]interface{}
-// @Param    id path string true "Object ID"
+// @Param    id   path      string  true  "Object ID"
 // @Router   /index/{id}/metdata [get]
 func NewGetMetadataHandler(s *sakuin.Service) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -164,12 +165,13 @@ func NewGetMetadataHandler(s *sakuin.Service) fiber.Handler {
 
 // NewIndexHandler godoc
 // @Summary  index a new object along with its metadata
-// @Tags     v1
+// @Tags     Index
 // @Accept   multipart/form-data
 // @Produce  json
-// @Param    metadata         body     map[string]interface{}  true  "Object metadata"
-// @Success  200          {object}  sakuin.IndexResponse
-// @Failure  400          {object} APIError
+// @Param    metadata  body      map[string]interface{}  true  "Object metadata"
+// @Success  200       {object}  sakuin.IndexResponse
+// @Failure  400       {object}  APIError
+// @Failure  500       {object}  APIError
 // @Router   /index [post]
 func NewIndexHandler(s *sakuin.Service) fiber.Handler {
 	return func(c *fiber.Ctx) error {

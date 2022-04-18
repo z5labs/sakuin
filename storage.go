@@ -36,6 +36,7 @@ type ObjectStore interface {
 	Stat(ctx context.Context, id string) (*StatInfo, error)
 	Get(ctx context.Context, id string) ([]byte, error)
 	Put(ctx context.Context, id string, b []byte) error
+	Update(ctx context.Context, id string, b []byte) error
 }
 
 type TestingT interface {
@@ -44,10 +45,16 @@ type TestingT interface {
 }
 
 func RunObjectStorageTests(t TestingT, objStore ObjectStore) {
-	t.Run("should fail with ObjectDoesNotExistErr if object doesn't exist", func(subT TestingT) {
+	t.Run("get object should fail with ObjectDoesNotExistErr if object doesn't exist", func(subT TestingT) {
 		var objErr ObjectDoesNotExistErr
 		_, err := objStore.Get(context.Background(), "")
-		assert.ErrorAs(subT, err, &objErr, "expected and ObjectDoesNotExistErr")
+		assert.ErrorAs(subT, err, &objErr, "expected an ObjectDoesNotExistErr")
+	})
+
+	t.Run("update object should fail with ObjectDoesNotExistErr if object doesn't exist", func(subT TestingT) {
+		var objErr ObjectDoesNotExistErr
+		err := objStore.Update(context.Background(), "", []byte{})
+		assert.ErrorAs(subT, err, &objErr, "expected an ObjectDoesNotExistErr")
 	})
 }
 
@@ -103,6 +110,18 @@ func (s *InMemoryObjectStore) Put(ctx context.Context, id string, b []byte) erro
 	s.mu.Unlock()
 	zap.L().Debug("successfully stored object in memory", zap.String("id", id))
 
+	return nil
+}
+
+func (s *InMemoryObjectStore) Update(ctx context.Context, id string, b []byte) error {
+	s.mu.Lock()
+	if _, exists := s.objects[id]; !exists {
+		return ObjectDoesNotExistErr{ID: id}
+	}
+	s.objects[id] = b
+	s.mu.Unlock()
+
+	zap.L().Debug("successfully updated object in memory", zap.String("id", id))
 	return nil
 }
 

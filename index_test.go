@@ -52,6 +52,54 @@ func TestGetObject(t *testing.T) {
 	})
 }
 
+func TestUpdateObject(t *testing.T) {
+	t.Run("should fail if ID doesn't exist", func(subT *testing.T) {
+		s := New(Config{
+			ObjectStore: NewInMemoryObjectStore(),
+		})
+
+		_, err := s.UpdateObject(context.Background(), &UpdateObjectRequest{
+			ID: "objectDoesNotExistID",
+		})
+
+		if _, ok := err.(ObjectDoesNotExistErr); err == nil || !ok {
+			subT.Log("expected error since object with given id doesn't exist")
+			subT.Fail()
+			return
+		}
+	})
+
+	t.Run("should succeed if object exists", func(subT *testing.T) {
+		objStore := NewInMemoryObjectStore()
+
+		testObjectID := "testObject"
+		testObjectContent := []byte("test content")
+		err := objStore.Put(context.Background(), testObjectID, testObjectContent)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		s := New(Config{
+			ObjectStore: objStore,
+		})
+
+		resp, err := s.GetObject(context.Background(), &GetObjectRequest{
+			ID: testObjectID,
+		})
+		if err != nil {
+			subT.Error(err)
+			return
+		}
+
+		if !bytes.Equal(testObjectContent, resp.Object) {
+			subT.Logf("expected object content to match\n\texpected: %s\n\tactual: %s", testObjectContent, resp.Object)
+			subT.Fail()
+			return
+		}
+	})
+}
+
 func TestGetMetadata(t *testing.T) {
 	docStore := NewInMemoryDocumentStore()
 

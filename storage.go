@@ -58,20 +58,6 @@ func RunObjectStorageTests(t TestingT, objStore ObjectStore) {
 	})
 }
 
-type DocumentStore interface {
-	Stat(ctx context.Context, id string) (*StatInfo, error)
-	Get(ctx context.Context, id string) (map[string]interface{}, error)
-	Upsert(ctx context.Context, id string, b map[string]interface{}) error
-}
-
-func RunDocumentStorageTests(t TestingT, docStore DocumentStore) {
-	t.Run("should fail with DocumentDoesNotExistErr if document doesn't exist", func(subT TestingT) {
-		var docErr DocumentDoesNotExistErr
-		_, err := docStore.Get(context.Background(), "")
-		assert.ErrorAs(subT, err, &docErr, "expected and DocumentDoesNotExistErr")
-	})
-}
-
 type InMemoryObjectStore struct {
 	mu      sync.Mutex
 	objects map[string][]byte
@@ -135,6 +121,20 @@ func (s *InMemoryObjectStore) NumOfObects() int {
 	defer s.mu.Unlock()
 
 	return len(s.objects)
+}
+
+type DocumentStore interface {
+	Stat(ctx context.Context, id string) (*StatInfo, error)
+	Get(ctx context.Context, id string) (map[string]interface{}, error)
+	Upsert(ctx context.Context, id string, b map[string]interface{}) error
+}
+
+func RunDocumentStorageTests(t TestingT, docStore DocumentStore) {
+	t.Run("should fail with DocumentDoesNotExistErr if document doesn't exist", func(subT TestingT) {
+		var docErr DocumentDoesNotExistErr
+		_, err := docStore.Get(context.Background(), "")
+		assert.ErrorAs(subT, err, &docErr, "expected and DocumentDoesNotExistErr")
+	})
 }
 
 type InMemoryDocumentStore struct {

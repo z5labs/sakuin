@@ -4,6 +4,7 @@ package http
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/z5labs/sakuin"
 	"github.com/z5labs/sakuin/http/middleware/logger"
@@ -57,6 +58,7 @@ func NewServer(s *sakuin.Service, cfg ...fiber.Config) *fiber.App {
 
 	// Metadata
 	app.Get("/index/:id/metadata", NewGetMetadataHandler(s))
+	app.Put("/index/:id/metadata", NewUpdateMetadataHandler(s))
 
 	// Indexing
 	app.Post("/index", NewIndexHandler(s))
@@ -160,6 +162,56 @@ func NewGetMetadataHandler(s *sakuin.Service) fiber.Handler {
 
 		return c.Status(fiber.StatusOK).
 			JSON(resp.Metadata)
+	}
+}
+
+// NewUpdateMetadataHandler godoc
+// @Summary  Update object metadata by id. This will override and merge metadata fields.
+// @Tags     Metadata
+// @Accept   json
+// @Success  200  "Successfully updated object metadata."
+// @Failure  500  {object}  APIError
+// @Param    id   path      string  true  "Object ID"
+// @Router   /index/{id}/metadata [put]
+func NewUpdateMetadataHandler(s *sakuin.Service) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if contentType := c.Get("Content-Type"); !strings.Contains(contentType, "application/json") {
+			zap.L().Warn("received invalid content type", zap.String("content-type", contentType))
+
+			return c.Status(fiber.StatusBadRequest).
+				JSON(APIError{
+					Message: "content type must be: application/json",
+				})
+		}
+
+		var m map[string]interface{}
+		err := c.BodyParser(&m)
+		if err != nil {
+			zap.L().Error("unexpected error when unmarshalling request body", zap.Error(err))
+			return c.Status(fiber.StatusInternalServerError).
+				JSON(APIError{
+					Message: err.Error(),
+				})
+		}
+
+		id := c.Params("id")
+
+		_, err = s.UpdateMetadata(c.Context(), &sakuin.UpdateMetadataRequest{
+			ID:       id,
+			Metadata: m,
+		})
+		if _, ok := err.(sakuin.DocumentDoesNotExistErr); ok {
+			zap.L().Error("metadata does not exist", zap.String("id", id))
+			return c.SendStatus(fiber.StatusNotFound)
+		}
+		if err != nil {
+			zap.L().Error("unexpected error when updating metadata", zap.Error(err))
+			return c.Status(fiber.StatusInternalServerError).JSON(APIError{
+				Message: err.Error(),
+			})
+		}
+
+		return c.SendStatus(fiber.StatusOK)
 	}
 }
 

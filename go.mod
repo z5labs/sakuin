@@ -6,13 +6,13 @@ require (
 	github.com/arsmn/fiber-swagger/v2 v2.31.1
 	github.com/gofiber/fiber/v2 v2.31.0
 	github.com/google/uuid v1.3.0
-	github.com/mitchellh/mapstructure v1.4.3
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/viper v1.11.0
 	github.com/stretchr/testify v1.7.1
 	github.com/swaggo/swag v1.8.1
 	go.uber.org/zap v1.21.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	google.golang.org/protobuf v1.28.0
 )
 
 require (
@@ -32,6 +32,7 @@ require (
 	github.com/klauspost/compress v1.15.0 // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
+	github.com/mitchellh/mapstructure v1.4.3 // indirect
 	github.com/pelletier/go-toml v1.9.4 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.0-beta.8 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

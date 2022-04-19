@@ -25,7 +25,7 @@ func (e ContentTypeError) Error() string {
 }
 
 // ReadParts
-func ReadParts(r io.Reader, contentType string) (metadata map[string]interface{}, object []byte, err error) {
+func ReadParts(r io.Reader, contentType string) (metadata json.RawMessage, object []byte, err error) {
 	mediaType, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		zap.L().Error("", zap.Error(err))

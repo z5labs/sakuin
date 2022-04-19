@@ -3,17 +3,20 @@ package http
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/z5labs/sakuin"
 	"github.com/z5labs/sakuin/http/middleware/logger"
+	pb "github.com/z5labs/sakuin/proto"
 
 	swagger "github.com/arsmn/fiber-swagger/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/pprof"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // APIError
@@ -79,15 +82,18 @@ func NewServer(s *sakuin.Service, cfg ...fiber.Config) *fiber.App {
 // @Tags     Objects
 // @Accept   json
 // @Produce  application/zip
-// @Param    id  path  string  true  "Object ID"
+// @Success  200  "Successfully return object contents in response body"
+// @Failure  404  "Object not found"
+// @Failure  500  {object}  APIError
+// @Param    id   path      string  true  "Object ID"
 // @Router   /index/{id}/object [get]
 func NewGetObjectHandler(s *sakuin.Service) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		c.AcceptsEncodings("gzip", "compress", "br")
 		id := c.Params("id")
 
-		resp, err := s.GetObject(c.Context(), &sakuin.GetObjectRequest{
-			ID: id,
+		resp, err := s.GetObject(c.Context(), &pb.GetObjectRequest{
+			Id: id,
 		})
 		if _, ok := err.(sakuin.ObjectDoesNotExistErr); ok {
 			zap.L().Error("object does not exist", zap.String("id", id))
@@ -101,7 +107,7 @@ func NewGetObjectHandler(s *sakuin.Service) fiber.Handler {
 		}
 
 		return c.Status(fiber.StatusOK).
-			Send(resp.Object)
+			Send(resp.Content)
 	}
 }
 
@@ -117,8 +123,8 @@ func NewUpdateObjectHandler(s *sakuin.Service) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		id := c.Params("id")
 
-		_, err := s.UpdateObject(c.Context(), &sakuin.UpdateObjectRequest{
-			ID:      id,
+		_, err := s.UpdateObject(c.Context(), &pb.UpdateObjectRequest{
+			Id:      id,
 			Content: c.Body(),
 		})
 		if _, ok := err.(sakuin.ObjectDoesNotExistErr); ok {
@@ -142,14 +148,15 @@ func NewUpdateObjectHandler(s *sakuin.Service) fiber.Handler {
 // @Accept   json
 // @Produce  json
 // @Success  200  {object}  map[string]interface{}
+// @Failure  500  {object}  APIError
 // @Param    id   path      string  true  "Object ID"
 // @Router   /index/{id}/metdata [get]
 func NewGetMetadataHandler(s *sakuin.Service) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		id := c.Params("id")
 
-		resp, err := s.GetMetadata(c.Context(), &sakuin.GetMetadataRequest{
-			ID: id,
+		resp, err := s.GetMetadata(c.Context(), &pb.GetMetadataRequest{
+			Id: id,
 		})
 		if _, ok := err.(sakuin.DocumentDoesNotExistErr); ok {
 			zap.L().Error("metadata does not exist", zap.String("id", id))
@@ -157,11 +164,24 @@ func NewGetMetadataHandler(s *sakuin.Service) fiber.Handler {
 		}
 		if err != nil {
 			zap.L().Error("unexpected error when retrieving metadata", zap.Error(err))
-			return err
+			return c.Status(fiber.StatusInternalServerError).
+				JSON(APIError{
+					Message: err.Error(),
+				})
+		}
+
+		var msg pb.JSONMetadata
+		err = resp.Metadata.UnmarshalTo(&msg)
+		if err != nil {
+			zap.L().Error("unexpected error when unmarshalling any proto", zap.Error(err))
+			return c.Status(fiber.StatusInternalServerError).
+				JSON(APIError{
+					Message: err.Error(),
+				})
 		}
 
 		return c.Status(fiber.StatusOK).
-			JSON(resp.Metadata)
+			JSON(json.RawMessage(msg.Json))
 	}
 }
 
@@ -184,8 +204,8 @@ func NewUpdateMetadataHandler(s *sakuin.Service) fiber.Handler {
 				})
 		}
 
-		var m map[string]interface{}
-		err := c.BodyParser(&m)
+		var metadata json.RawMessage
+		err := c.BodyParser(&metadata)
 		if err != nil {
 			zap.L().Error("unexpected error when unmarshalling request body", zap.Error(err))
 			return c.Status(fiber.StatusInternalServerError).
@@ -196,9 +216,18 @@ func NewUpdateMetadataHandler(s *sakuin.Service) fiber.Handler {
 
 		id := c.Params("id")
 
-		_, err = s.UpdateMetadata(c.Context(), &sakuin.UpdateMetadataRequest{
-			ID:       id,
-			Metadata: m,
+		any, err := anypb.New(&pb.JSONMetadata{Json: metadata})
+		if err != nil {
+			zap.L().Error("unexpected error when marshalling any proto", zap.Error(err))
+			return c.Status(fiber.StatusInternalServerError).
+				JSON(APIError{
+					Message: err.Error(),
+				})
+		}
+
+		_, err = s.UpdateMetadata(c.Context(), &pb.UpdateMetadataRequest{
+			Id:       id,
+			Metadata: any,
 		})
 		if _, ok := err.(sakuin.DocumentDoesNotExistErr); ok {
 			zap.L().Error("metadata does not exist", zap.String("id", id))
@@ -221,7 +250,7 @@ func NewUpdateMetadataHandler(s *sakuin.Service) fiber.Handler {
 // @Accept   multipart/form-data
 // @Produce  json
 // @Param    metadata  body      map[string]interface{}  true  "Object metadata"
-// @Success  200       {object}  sakuin.IndexResponse
+// @Success  200       {object}  pb.IndexResponse
 // @Failure  400       {object}  APIError
 // @Failure  500       {object}  APIError
 // @Router   /index [post]
@@ -243,11 +272,25 @@ func NewIndexHandler(s *sakuin.Service) fiber.Handler {
 			})
 		}
 		if object == nil {
+			zap.L().Warn("no object provided for indexing")
 			return c.Status(fiber.StatusBadRequest).JSON(ErrMissingObjectPart)
 		}
 
-		resp, err := s.Index(c.Context(), &sakuin.IndexRequest{
-			Metadata: metadata,
+		var any *anypb.Any
+		if metadata != nil {
+			any, err = anypb.New(&pb.JSONMetadata{Json: metadata})
+			if err != nil {
+				zap.L().Error("unexpected error when marshalling any proto", zap.Error(err))
+				return c.Status(fiber.StatusInternalServerError).
+					JSON(APIError{
+						Message: err.Error(),
+					})
+			}
+		}
+
+		zap.L().Info("indexing object and metadata")
+		resp, err := s.Index(c.Context(), &pb.IndexRequest{
+			Metadata: any,
 			Object:   object,
 		})
 		if err != nil {
@@ -255,6 +298,7 @@ func NewIndexHandler(s *sakuin.Service) fiber.Handler {
 			return err
 		}
 
+		zap.L().Info("successfully indexed object", zap.String("id", resp.Id))
 		return c.Status(fiber.StatusOK).
 			JSON(resp)
 	}

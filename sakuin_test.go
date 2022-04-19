@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"strings"
 	"testing"
+
+	pb "github.com/z5labs/sakuin/proto"
 )
 
 func TestGetObject(t *testing.T) {
@@ -24,8 +26,8 @@ func TestGetObject(t *testing.T) {
 	})
 
 	t.Run("should fail if ID doesn't exist", func(subT *testing.T) {
-		_, err := s.GetObject(context.Background(), &GetObjectRequest{
-			ID: "",
+		_, err := s.GetObject(context.Background(), &pb.GetObjectRequest{
+			Id: "",
 		})
 
 		if _, ok := err.(ObjectDoesNotExistErr); err == nil || !ok {
@@ -36,16 +38,16 @@ func TestGetObject(t *testing.T) {
 	})
 
 	t.Run("should succeed if object exists", func(subT *testing.T) {
-		resp, err := s.GetObject(context.Background(), &GetObjectRequest{
-			ID: testObjectID,
+		resp, err := s.GetObject(context.Background(), &pb.GetObjectRequest{
+			Id: testObjectID,
 		})
 		if err != nil {
 			subT.Error(err)
 			return
 		}
 
-		if !bytes.Equal(testObjectContent, resp.Object) {
-			subT.Logf("expected object content to match\n\texpected: %s\n\tactual: %s", testObjectContent, resp.Object)
+		if !bytes.Equal(testObjectContent, resp.Content) {
+			subT.Logf("expected object content to match\n\texpected: %s\n\tactual: %s", testObjectContent, resp.Content)
 			subT.Fail()
 			return
 		}
@@ -58,8 +60,8 @@ func TestUpdateObject(t *testing.T) {
 			ObjectStore: NewInMemoryObjectStore(),
 		})
 
-		_, err := s.UpdateObject(context.Background(), &UpdateObjectRequest{
-			ID: "objectDoesNotExistID",
+		_, err := s.UpdateObject(context.Background(), &pb.UpdateObjectRequest{
+			Id: "objectDoesNotExistID",
 		})
 
 		if _, ok := err.(ObjectDoesNotExistErr); err == nil || !ok {
@@ -84,16 +86,16 @@ func TestUpdateObject(t *testing.T) {
 			ObjectStore: objStore,
 		})
 
-		resp, err := s.GetObject(context.Background(), &GetObjectRequest{
-			ID: testObjectID,
+		resp, err := s.GetObject(context.Background(), &pb.GetObjectRequest{
+			Id: testObjectID,
 		})
 		if err != nil {
 			subT.Error(err)
 			return
 		}
 
-		if !bytes.Equal(testObjectContent, resp.Object) {
-			subT.Logf("expected object content to match\n\texpected: %s\n\tactual: %s", testObjectContent, resp.Object)
+		if !bytes.Equal(testObjectContent, resp.Content) {
+			subT.Logf("expected object content to match\n\texpected: %s\n\tactual: %s", testObjectContent, resp.Content)
 			subT.Fail()
 			return
 		}
@@ -119,8 +121,8 @@ func TestGetMetadata(t *testing.T) {
 	})
 
 	t.Run("should fail if ID doesn't exist", func(subT *testing.T) {
-		_, err := s.GetMetadata(context.Background(), &GetMetadataRequest{
-			ID: "",
+		_, err := s.GetMetadata(context.Background(), &pb.GetMetadataRequest{
+			Id: "",
 		})
 
 		if _, ok := err.(DocumentDoesNotExistErr); err == nil || !ok {
@@ -131,22 +133,28 @@ func TestGetMetadata(t *testing.T) {
 	})
 
 	t.Run("should succeed if doc exists", func(subT *testing.T) {
-		resp, err := s.GetMetadata(context.Background(), &GetMetadataRequest{
-			ID: testGoodDocID,
+		resp, err := s.GetMetadata(context.Background(), &pb.GetMetadataRequest{
+			Id: testGoodDocID,
 		})
 		if err != nil {
 			subT.Error(err)
 			return
 		}
 
-		if testGoodDoc["name"] != resp.Metadata["name"] {
-			subT.Logf("expected name to match\n\texpected: %s\n\tactual: %s", testGoodDoc["name"], resp.Metadata["name"])
+		metadata, err := unmarshalAnyToJSON(resp.Metadata)
+		if err != nil {
+			subT.Error(err)
+			return
+		}
+
+		if testGoodDoc["name"] != metadata["name"] {
+			subT.Logf("expected name to match\n\texpected: %s\n\tactual: %s", testGoodDoc["name"], metadata["name"])
 			subT.Fail()
 			return
 		}
 
-		if testGoodDoc["description"] != resp.Metadata["description"] {
-			subT.Logf("expected description to match\n\texpected: %s\n\tactual: %s", testGoodDoc["description"], resp.Metadata["description"])
+		if testGoodDoc["description"] != metadata["description"] {
+			subT.Logf("expected description to match\n\texpected: %s\n\tactual: %s", testGoodDoc["description"], metadata["description"])
 			subT.Fail()
 			return
 		}
@@ -164,19 +172,25 @@ func TestIndex(t *testing.T) {
 			RandSrc:       rand.Reader,
 		})
 
-		resp, err := s.Index(context.Background(), &IndexRequest{
-			Metadata: map[string]interface{}{
-				"name":        "test",
-				"description": "test",
-			},
-			Object: []byte("test object content"),
+		metadata, err := marshalJSONToAny(map[string]interface{}{
+			"name":        "test",
+			"description": "test",
 		})
 		if err != nil {
 			subT.Error(err)
 			return
 		}
 
-		if resp.ID == "" {
+		resp, err := s.Index(context.Background(), &pb.IndexRequest{
+			Metadata: metadata,
+			Object:   []byte("test object content"),
+		})
+		if err != nil {
+			subT.Error(err)
+			return
+		}
+
+		if resp.Id == "" {
 			subT.Fail()
 			return
 		}
@@ -202,19 +216,25 @@ func TestIndex(t *testing.T) {
 			RandSrc:       strings.NewReader(same + same + different),
 		})
 
-		resp, err := s.Index(context.Background(), &IndexRequest{
-			Metadata: map[string]interface{}{
-				"name":        "test",
-				"description": "test",
-			},
-			Object: []byte("test object content"),
+		metadata, err := marshalJSONToAny(map[string]interface{}{
+			"name":        "test",
+			"description": "test",
 		})
 		if err != nil {
 			subT.Error(err)
 			return
 		}
 
-		if resp.ID == "" {
+		resp, err := s.Index(context.Background(), &pb.IndexRequest{
+			Metadata: metadata,
+			Object:   []byte("test object content"),
+		})
+		if err != nil {
+			subT.Error(err)
+			return
+		}
+
+		if resp.Id == "" {
 			subT.Fail()
 			return
 		}

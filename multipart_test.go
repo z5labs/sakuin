@@ -61,7 +61,14 @@ func TestReadParts(t *testing.T) {
 			return
 		}
 
-		if !assert.Equal(subT, testMetadata, metadata) {
+		var m map[string]interface{}
+		err = json.Unmarshal(metadata, &m)
+		if err != nil {
+			subT.Error(err)
+			return
+		}
+
+		if !assert.Equal(subT, testMetadata, m) {
 			return
 		}
 
@@ -109,7 +116,14 @@ func TestReadParts(t *testing.T) {
 			return
 		}
 
-		if !assert.Equal(subT, testMetadata, metadata) {
+		var m map[string]interface{}
+		err = json.Unmarshal(metadata, &m)
+		if err != nil {
+			subT.Error(err)
+			return
+		}
+
+		if !assert.Equal(subT, testMetadata, m) {
 			return
 		}
 
@@ -186,7 +200,14 @@ func TestReadParts(t *testing.T) {
 			return
 		}
 
-		if !assert.Equal(subT, testMetadata, metadata) {
+		var m map[string]interface{}
+		err = json.Unmarshal(metadata, &m)
+		if err != nil {
+			subT.Error(err)
+			return
+		}
+
+		if !assert.Equal(subT, testMetadata, m) {
 			return
 		}
 	})

@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/z5labs/sakuin"
+
+	"github.com/stretchr/testify/assert"
 )
 
 const getObjectEndpointFmt = "http://%s/index/%s/object"

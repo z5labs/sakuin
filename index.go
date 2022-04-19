@@ -76,6 +76,25 @@ func (s *Service) GetMetadata(ctx context.Context, req *GetMetadataRequest) (*Ge
 	return &GetMetadataResponse{Metadata: doc}, nil
 }
 
+type UpdateMetadataRequest struct {
+	ID       string
+	Metadata map[string]interface{}
+}
+
+type UpdateMetadataResponse struct{}
+
+func (s *Service) UpdateMetadata(ctx context.Context, req *UpdateMetadataRequest) (*UpdateMetadataResponse, error) {
+	stats, err := s.docDB.Stat(ctx, req.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !stats.Exists {
+		return nil, DocumentDoesNotExistErr{ID: req.ID}
+	}
+
+	return nil, s.docDB.Upsert(ctx, req.ID, req.Metadata)
+}
+
 type IndexRequest struct {
 	Metadata map[string]interface{}
 	Object   []byte

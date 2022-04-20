@@ -16,12 +16,14 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
+// Config
 type Config struct {
 	ObjectStore   ObjectStore
 	DocumentStore DocumentStore
 	RandSrc       io.Reader
 }
 
+// Service
 type Service struct {
 	objDB ObjectStore
 	docDB DocumentStore
@@ -29,6 +31,7 @@ type Service struct {
 	rander io.Reader
 }
 
+// New constructs a new service instance with a given configuration
 func New(cfg Config) *Service {
 	return &Service{
 		objDB:  cfg.ObjectStore,
@@ -37,6 +40,7 @@ func New(cfg Config) *Service {
 	}
 }
 
+// GetObject
 func (s *Service) GetObject(ctx context.Context, req *pb.GetObjectRequest) (*pb.GetObjectResponse, error) {
 	obj, err := s.objDB.Get(ctx, req.Id)
 	if err != nil {
@@ -45,10 +49,17 @@ func (s *Service) GetObject(ctx context.Context, req *pb.GetObjectRequest) (*pb.
 	return &pb.GetObjectResponse{Content: obj}, nil
 }
 
+// UpdateObject
 func (s *Service) UpdateObject(ctx context.Context, req *pb.UpdateObjectRequest) (*pb.UpdateObjectResponse, error) {
 	return nil, s.objDB.Update(ctx, req.Id, req.Content)
 }
 
+// DeleteObject
+func (s *Service) DeleteObject(ctx context.Context, req *pb.DeleteObjectRequest) (*pb.DeleteObjectResponse, error) {
+	return nil, nil
+}
+
+// GetMetadata
 func (s *Service) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {
 	metadata, err := s.docDB.Get(ctx, req.Id)
 	if err != nil {
@@ -64,6 +75,7 @@ func (s *Service) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (
 	return &pb.GetMetadataResponse{Metadata: any}, nil
 }
 
+// UpdateMetadata
 func (s *Service) UpdateMetadata(ctx context.Context, req *pb.UpdateMetadataRequest) (*pb.UpdateMetadataResponse, error) {
 	stats, err := s.docDB.Stat(ctx, req.Id)
 	if err != nil {
@@ -84,6 +96,12 @@ func (s *Service) UpdateMetadata(ctx context.Context, req *pb.UpdateMetadataRequ
 	return nil, s.docDB.Upsert(ctx, req.Id, metadata)
 }
 
+// DeleteMetadata
+func (s *Service) DeleteMetadata(ctx context.Context, req *pb.DeleteMetadataRequest) (*pb.DeleteMetadataResponse, error) {
+	return nil, nil
+}
+
+// Index
 func (s *Service) Index(ctx context.Context, req *pb.IndexRequest) (*pb.IndexResponse, error) {
 	id, err := s.generateUUID(ctx)
 	if err != nil {

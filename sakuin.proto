@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package proto;
 
-option go_package = "github.com/z5labs/sakuin/proto";
+option go_package = "./proto";
 
 import "google/protobuf/any.proto";
 
@@ -11,9 +11,13 @@ service Sakuin {
 
   rpc UpdateObject (UpdateObjectRequest) returns (UpdateObjectResponse);
 
+  rpc DeleteObject (DeleteObjectRequest) returns (DeleteObjectResponse);
+
   rpc GetMetadata (GetMetadataRequest) returns (GetMetadataResponse);
 
   rpc UpdateMetadata (UpdateMetadataRequest) returns (UpdateMetadataResponse);
+
+  rpc DeleteMetadata (DeleteMetadataRequest) returns (DeleteMetadataResponse);
 
   rpc Index (IndexRequest) returns (IndexResponse);
 }
@@ -33,6 +37,12 @@ message UpdateObjectRequest {
 
 message UpdateObjectResponse {}
 
+message DeleteObjectRequest {
+  string id = 1;
+}
+
+message DeleteObjectResponse {}
+
 message GetMetadataRequest {
   string id = 1;
 }
@@ -51,6 +61,12 @@ message UpdateMetadataRequest {
 }
 
 message UpdateMetadataResponse {}
+
+message DeleteMetadataRequest {
+  string id = 1;
+}
+
+message DeleteMetadataResponse {}
 
 message IndexRequest {
   google.protobuf.Any metadata = 1;

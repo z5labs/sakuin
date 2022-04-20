@@ -32,11 +32,22 @@ type StatInfo struct {
 	Size   int
 }
 
+// ObjectStore represents an Object database.
 type ObjectStore interface {
+	// Stat retrieve info about object by its id.
 	Stat(ctx context.Context, id string) (*StatInfo, error)
+
+	// Get object by id.
 	Get(ctx context.Context, id string) ([]byte, error)
+
+	// Put a new object into storage with the given id.
 	Put(ctx context.Context, id string, b []byte) error
+
+	// Update object by id.
 	Update(ctx context.Context, id string, b []byte) error
+
+	// Delete object by id.
+	Delete(ctx context.Context, id string) error
 }
 
 type TestingT interface {
@@ -44,6 +55,10 @@ type TestingT interface {
 	Run(name string, f func(TestingT))
 }
 
+// RunObjectStorageTests runs a suite of functional tests which can be
+// used to verify if a particular ObjectStore follows the expected
+// behaviour.
+//
 func RunObjectStorageTests(t TestingT, objStore ObjectStore) {
 	t.Run("get object should fail with ObjectDoesNotExistErr if object doesn't exist", func(subT TestingT) {
 		var objErr ObjectDoesNotExistErr
@@ -56,142 +71,183 @@ func RunObjectStorageTests(t TestingT, objStore ObjectStore) {
 		err := objStore.Update(context.Background(), "", []byte{})
 		assert.ErrorAs(subT, err, &objErr, "expected an ObjectDoesNotExistErr")
 	})
+
+	t.Run("delete object should fail with ObjectDoesNotExistErr if object doesn't exist", func(subT TestingT) {
+		var objErr ObjectDoesNotExistErr
+		err := objStore.Delete(context.Background(), "")
+		assert.ErrorAs(subT, err, &objErr, "expected an ObjectDoesNotExistErr")
+	})
 }
 
+// InMemoryObjectStore implements the ObjectStore by storing all objects in memory.
+// This SHOULD only be used for TESTING only.
+//
 type InMemoryObjectStore struct {
-	mu      sync.Mutex
-	objects map[string][]byte
+	objects sync.Map
 }
 
 func NewInMemoryObjectStore() *InMemoryObjectStore {
-	return &InMemoryObjectStore{
-		objects: make(map[string][]byte),
-	}
+	return &InMemoryObjectStore{}
 }
 
 func (s *InMemoryObjectStore) Stat(ctx context.Context, id string) (*StatInfo, error) {
-	s.mu.Lock()
-	obj, exists := s.objects[id]
-	s.mu.Unlock()
+	var numOfObjects int
+	obj, exists := s.objects.Load(id)
+	if obj != nil {
+		numOfObjects = len(obj.([]byte))
+	}
 
-	return &StatInfo{Exists: exists, Size: len(obj)}, nil
+	return &StatInfo{Exists: exists, Size: numOfObjects}, nil
 }
 
 func (s *InMemoryObjectStore) Get(ctx context.Context, id string) ([]byte, error) {
-	s.mu.Lock()
-	obj, exists := s.objects[id]
-	s.mu.Unlock()
+	obj, exists := s.objects.Load(id)
 	if !exists {
 		zap.L().Warn("unable to find object in memory", zap.String("id", id))
 		return nil, ObjectDoesNotExistErr{ID: id}
 	}
 	zap.L().Debug("successfully retrieved object from memory", zap.String("id", id))
 
-	return obj, nil
+	return obj.([]byte), nil
 }
 
 func (s *InMemoryObjectStore) Put(ctx context.Context, id string, b []byte) error {
-	s.mu.Lock()
-	s.objects[id] = b
-	s.mu.Unlock()
+	s.objects.Store(id, b)
 	zap.L().Debug("successfully stored object in memory", zap.String("id", id))
 
 	return nil
 }
 
 func (s *InMemoryObjectStore) Update(ctx context.Context, id string, b []byte) error {
-	s.mu.Lock()
-	if _, exists := s.objects[id]; !exists {
+	if _, exists := s.objects.Load(id); !exists {
 		return ObjectDoesNotExistErr{ID: id}
 	}
-	s.objects[id] = b
-	s.mu.Unlock()
+	s.objects.Store(id, b)
 
 	zap.L().Debug("successfully updated object in memory", zap.String("id", id))
 	return nil
 }
 
+func (s *InMemoryObjectStore) Delete(ctx context.Context, id string) error {
+	if _, exists := s.objects.Load(id); !exists {
+		return ObjectDoesNotExistErr{ID: id}
+	}
+	s.objects.Delete(id)
+
+	zap.L().Debug("successfully deleted object", zap.String("id", id))
+	return nil
+}
+
 func (s *InMemoryObjectStore) WithObject(id string, obj []byte) *InMemoryObjectStore {
-	s.objects[id] = obj
+	s.objects.Store(id, obj)
 	return s
 }
 
 func (s *InMemoryObjectStore) NumOfObects() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return len(s.objects)
+	var n int
+	s.objects.Range(func(key, value any) bool {
+		n += 1
+		return true
+	})
+	return n
 }
 
+// DocumentStore represents a Document database.
 type DocumentStore interface {
+	// Stat retrieve document info by id.
 	Stat(ctx context.Context, id string) (*StatInfo, error)
+
+	// Get document by id.
 	Get(ctx context.Context, id string) (map[string]interface{}, error)
+
+	// Upsert document.
 	Upsert(ctx context.Context, id string, b map[string]interface{}) error
+
+	// Delete document by id
+	Delete(ctx context.Context, id string) error
 }
 
+// RunDocumentStorageTests runs a suite of functional tests which can be
+// used to verify if a particular DocumentStore follows the expected
+// behaviour.
+//
 func RunDocumentStorageTests(t TestingT, docStore DocumentStore) {
-	t.Run("should fail with DocumentDoesNotExistErr if document doesn't exist", func(subT TestingT) {
+	t.Run("get document should fail with DocumentDoesNotExistErr if document doesn't exist", func(subT TestingT) {
 		var docErr DocumentDoesNotExistErr
 		_, err := docStore.Get(context.Background(), "")
 		assert.ErrorAs(subT, err, &docErr, "expected and DocumentDoesNotExistErr")
 	})
+
+	t.Run("delete document should fail with DocumentDoesNotExistErr if document doesn't exist", func(subT TestingT) {
+		var docErr DocumentDoesNotExistErr
+		err := docStore.Delete(context.Background(), "")
+		assert.ErrorAs(subT, err, &docErr, "expected and DocumentDoesNotExistErr")
+	})
 }
 
+// InMemoryDocumentStore implements the DocumentStore by storing all documents in memory.
+// This SHOULD only be used for TESTING only.
+//
 type InMemoryDocumentStore struct {
-	mu   sync.Mutex
-	docs map[string]map[string]interface{}
+	docs sync.Map
 }
 
 func NewInMemoryDocumentStore() *InMemoryDocumentStore {
-	return &InMemoryDocumentStore{
-		docs: make(map[string]map[string]interface{}),
-	}
+	return &InMemoryDocumentStore{}
 }
 
 func (s *InMemoryDocumentStore) Stat(ctx context.Context, id string) (*StatInfo, error) {
-	s.mu.Lock()
-	doc, exists := s.docs[id]
-	s.mu.Unlock()
+	var numOfFields int
+	doc, exists := s.docs.Load(id)
+	if doc != nil {
+		numOfFields = len(doc.(map[string]interface{}))
+	}
 
-	return &StatInfo{Exists: exists, Size: len(doc)}, nil
+	return &StatInfo{Exists: exists, Size: numOfFields}, nil
 }
 
 func (s *InMemoryDocumentStore) Get(ctx context.Context, id string) (map[string]interface{}, error) {
-	s.mu.Lock()
-	doc, exists := s.docs[id]
-	s.mu.Unlock()
+	doc, exists := s.docs.Load(id)
 	if !exists {
 		zap.L().Warn("unable to retrieve document from memory", zap.String("id", id))
 		return nil, DocumentDoesNotExistErr{ID: id}
 	}
 	zap.L().Debug("successfully retrieved document from memory", zap.String("id", id))
 
-	return doc, nil
+	return doc.(map[string]interface{}), nil
 }
 
 func (s *InMemoryDocumentStore) Upsert(ctx context.Context, id string, doc map[string]interface{}) error {
-	s.mu.Lock()
-	d, ok := s.docs[id]
+	d, ok := s.docs.Load(id)
 	if ok {
-		doc = mergeDocs(doc, d)
+		doc = mergeDocs(doc, d.(map[string]interface{}))
 	}
-	s.docs[id] = doc
-	s.mu.Unlock()
+	s.docs.Store(id, doc)
 	zap.L().Debug("successfully stored document in memory", zap.String("id", id))
 
 	return nil
 }
 
+func (s *InMemoryDocumentStore) Delete(ctx context.Context, id string) error {
+	if _, exists := s.docs.Load(id); !exists {
+		return DocumentDoesNotExistErr{ID: id}
+	}
+	s.docs.Delete(id)
+	return nil
+}
+
 func (s *InMemoryDocumentStore) WithDocument(id string, doc map[string]interface{}) *InMemoryDocumentStore {
-	s.docs[id] = doc
+	s.docs.Store(id, doc)
 	return s
 }
 
 func (s *InMemoryDocumentStore) NumOfDocs() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return len(s.docs)
+	var n int
+	s.docs.Range(func(key, val any) bool {
+		n += 1
+		return true
+	})
+	return n
 }
 
 func mergeDocs(dst, src map[string]interface{}) map[string]interface{} {

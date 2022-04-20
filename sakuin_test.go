@@ -162,10 +162,10 @@ func TestGetMetadata(t *testing.T) {
 }
 
 func TestIndex(t *testing.T) {
-	objStore := NewInMemoryObjectStore()
-	docStore := NewInMemoryDocumentStore()
-
 	t.Run("should succeed", func(subT *testing.T) {
+		objStore := NewInMemoryObjectStore()
+		docStore := NewInMemoryDocumentStore()
+
 		s := New(Config{
 			ObjectStore:   objStore,
 			DocumentStore: docStore,
@@ -207,6 +207,9 @@ func TestIndex(t *testing.T) {
 	})
 
 	t.Run("should succeed even if uuid already exists in db", func(subT *testing.T) {
+		objStore := NewInMemoryObjectStore()
+		docStore := NewInMemoryDocumentStore()
+
 		same := "0123456789ABCDEF"
 		different := "FEDBCA9876543210"
 

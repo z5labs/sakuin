@@ -15,7 +15,10 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-const sakuinEndpointFmt = "http://%s/index"
+const (
+	sakuinEndpointFmt = "http://%s/index"
+	deleteEndpointFmt = "http://%s/index/%s"
+)
 
 func TestIndexHandler(t *testing.T) {
 	t.Run("should succeed if metadata and object are present", func(subT *testing.T) {
@@ -59,7 +62,7 @@ func TestIndexHandler(t *testing.T) {
 
 		w.Close()
 
-		req, err := http.NewRequest("POST", fmt.Sprintf(sakuinEndpointFmt, addr), &b)
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf(sakuinEndpointFmt, addr), &b)
 		if err != nil {
 			subT.Error(err)
 			return
@@ -72,7 +75,7 @@ func TestIndexHandler(t *testing.T) {
 			return
 		}
 
-		if !assert.Equal(subT, 200, resp.StatusCode) {
+		if !assert.Equal(subT, http.StatusOK, resp.StatusCode) {
 			return
 		}
 
@@ -107,7 +110,7 @@ func TestIndexHandler(t *testing.T) {
 
 		w.Close()
 
-		req, err := http.NewRequest("POST", fmt.Sprintf(sakuinEndpointFmt, addr), &b)
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf(sakuinEndpointFmt, addr), &b)
 		if err != nil {
 			subT.Error(err)
 			return
@@ -120,7 +123,7 @@ func TestIndexHandler(t *testing.T) {
 			return
 		}
 
-		if !assert.Equal(subT, 200, resp.StatusCode) {
+		if !assert.Equal(subT, http.StatusOK, resp.StatusCode) {
 			return
 		}
 
@@ -162,7 +165,7 @@ func TestIndexHandler(t *testing.T) {
 
 		w.Close()
 
-		req, err := http.NewRequest("POST", fmt.Sprintf(sakuinEndpointFmt, addr), &b)
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf(sakuinEndpointFmt, addr), &b)
 		if err != nil {
 			subT.Error(err)
 			return
@@ -175,7 +178,7 @@ func TestIndexHandler(t *testing.T) {
 			return
 		}
 
-		if !assert.Equal(subT, 400, resp.StatusCode) {
+		if !assert.Equal(subT, http.StatusBadRequest, resp.StatusCode) {
 			return
 		}
 
@@ -231,7 +234,7 @@ func TestIndexHandler(t *testing.T) {
 
 		w.Close()
 
-		req, err := http.NewRequest("POST", fmt.Sprintf(sakuinEndpointFmt, addr), &b)
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf(sakuinEndpointFmt, addr), &b)
 		if err != nil {
 			subT.Error(err)
 			return
@@ -244,8 +247,38 @@ func TestIndexHandler(t *testing.T) {
 			return
 		}
 
-		if !assert.Equal(subT, 500, resp.StatusCode) {
+		if !assert.Equal(subT, http.StatusInternalServerError, resp.StatusCode) {
 			return
 		}
+	})
+}
+
+func TestDeleteHandler(t *testing.T) {
+	t.Run("should fail if id doesn't exist", func(subT *testing.T) {
+		addr, err := startTestServer(subT)
+		if err != nil {
+			subT.Error(err)
+			return
+		}
+
+		req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf(deleteEndpointFmt, addr, "testID"), nil)
+		if err != nil {
+			subT.Error(err)
+			return
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			subT.Error(err)
+			return
+		}
+
+		if !assert.Equal(subT, http.StatusNotFound, resp.StatusCode) {
+			return
+		}
+	})
+
+	t.Run("should succeed if id does exist", func(subT *testing.T) {
+		subT.Fail()
 	})
 }

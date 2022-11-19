@@ -29,26 +29,27 @@ func (e APIError) Error() string {
 }
 
 var (
+	// ErrMissingObjectPart is an APIError which is returned when a multipart form
+	// is missing a part with the name "object".
+	//
 	ErrMissingObjectPart = APIError{
 		Message: "must provide object part in form data",
 	}
 )
 
+// NewServer
+//
 // @title           Sakuin RESTful API
 // @version         0.0
 // @description     Sakuin is a REST based service for indexing objects along with metadata.
 // @termsOfService  http://swagger.io/terms/
-
 // @contact.name   Z5Labs
 // @contact.url    http://www.swagger.io/support
 // @contact.email  support@swagger.io
-
 // @license.name  MIT
 // @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
-
 // @BasePath  /
 // @schemes   http https
-
 func NewServer(s *sakuin.Service, cfg ...fiber.Config) *fiber.App {
 	app := fiber.New(cfg...)
 
@@ -65,6 +66,7 @@ func NewServer(s *sakuin.Service, cfg ...fiber.Config) *fiber.App {
 
 	// Indexing
 	app.Post("/index", NewIndexHandler(s))
+	app.Delete("/index/:id", NewDeleteHandler(s))
 
 	app.Use(
 		pprof.New(),
@@ -251,8 +253,8 @@ func NewUpdateMetadataHandler(s *sakuin.Service) fiber.Handler {
 // @Produce  json
 // @Param    metadata  body      map[string]interface{}  true  "Object metadata"
 // @Success  200       {object}  pb.IndexResponse
-// @Failure  400       {object}  APIError
-// @Failure  500       {object}  APIError
+// @Failure  400  {object}  APIError
+// @Failure  500  {object}  APIError
 // @Router   /index [post]
 func NewIndexHandler(s *sakuin.Service) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -301,5 +303,24 @@ func NewIndexHandler(s *sakuin.Service) fiber.Handler {
 		zap.L().Info("successfully indexed object", zap.String("id", resp.Id))
 		return c.Status(fiber.StatusOK).
 			JSON(resp)
+	}
+}
+
+// NewDeleteHandler godoc
+// @Summary  delete an object along with its metadata
+// @Tags     Index
+// @Param    id   path  string  true  "Object ID"
+// @Success  200  "Successfully deleted object and any metadata associated with it."
+// @Failure  404  "Unable to find object with given ID."
+// @Failure  500       {object}  APIError
+// @Router   /index/{id} [delete]
+func NewDeleteHandler(s *sakuin.Service) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		id := c.Params("id")
+
+		resp, err := s.Delete(c.Context(), &pb.DeleteRequest{
+			Id: id,
+		})
+		return c.SendStatus(fiber.StatusNotImplemented)
 	}
 }

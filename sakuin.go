@@ -40,67 +40,6 @@ func New(cfg Config) *Service {
 	}
 }
 
-// GetObject
-func (s *Service) GetObject(ctx context.Context, req *pb.GetObjectRequest) (*pb.GetObjectResponse, error) {
-	obj, err := s.objDB.Get(ctx, req.Id)
-	if err != nil {
-		return nil, err
-	}
-	return &pb.GetObjectResponse{Content: obj}, nil
-}
-
-// UpdateObject
-func (s *Service) UpdateObject(ctx context.Context, req *pb.UpdateObjectRequest) (*pb.UpdateObjectResponse, error) {
-	return nil, s.objDB.Update(ctx, req.Id, req.Content)
-}
-
-// DeleteObject
-func (s *Service) DeleteObject(ctx context.Context, req *pb.DeleteObjectRequest) (*pb.DeleteObjectResponse, error) {
-	return nil, nil
-}
-
-// GetMetadata
-func (s *Service) GetMetadata(ctx context.Context, req *pb.GetMetadataRequest) (*pb.GetMetadataResponse, error) {
-	metadata, err := s.docDB.Get(ctx, req.Id)
-	if err != nil {
-		zap.L().Error("unexpected error when getting metadata", zap.String("id", req.Id))
-		return nil, err
-	}
-
-	any, err := marshalJSONToAny(metadata)
-	if err != nil {
-		return nil, err
-	}
-
-	return &pb.GetMetadataResponse{Metadata: any}, nil
-}
-
-// UpdateMetadata
-func (s *Service) UpdateMetadata(ctx context.Context, req *pb.UpdateMetadataRequest) (*pb.UpdateMetadataResponse, error) {
-	stats, err := s.docDB.Stat(ctx, req.Id)
-	if err != nil {
-		zap.L().Error("unexpected error when stat-ing metadata", zap.Error(err))
-		return nil, err
-	}
-	if !stats.Exists {
-		zap.L().Error("metadata doesn't exist", zap.String("id", req.Id))
-		return nil, DocumentDoesNotExistErr{ID: req.Id}
-	}
-
-	metadata, err := unmarshalAnyToJSON(req.Metadata)
-	if err != nil {
-		return nil, err
-	}
-
-	zap.L().Info("updating metadata", zap.String("id", req.Id))
-	return nil, s.docDB.Upsert(ctx, req.Id, metadata)
-}
-
-// DeleteMetadata
-func (s *Service) DeleteMetadata(ctx context.Context, req *pb.DeleteMetadataRequest) (*pb.DeleteMetadataResponse, error) {
-	return nil, nil
-}
-
 // Index
 func (s *Service) Index(ctx context.Context, req *pb.IndexRequest) (*pb.IndexResponse, error) {
 	id, err := s.generateUUID(ctx)
@@ -136,6 +75,147 @@ func (s *Service) Index(ctx context.Context, req *pb.IndexRequest) (*pb.IndexRes
 	}
 
 	return &pb.IndexResponse{Id: id}, nil
+}
+
+// GetFromIndex
+func (s *Service) GetFromIndex(ctx context.Context, req *pb.GetRequest) (*pb.GetResponse, error) {
+	objCh := make(chan []byte, 1)
+	metaCh := make(chan *anypb.Any, 1)
+
+	g, gctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		defer close(objCh)
+
+		obj, err := s.getObject(gctx, req)
+		objCh <- obj
+
+		return err
+	})
+
+	g.Go(func() error {
+		defer close(metaCh)
+
+		meta, err := s.getMetadata(gctx, req)
+		metaCh <- meta
+
+		return err
+	})
+
+	err := g.Wait()
+	if err != nil {
+		// TODO: cleanup
+		zap.L().Error(
+			"encountered error while retrieving object and metadata",
+			zap.String("id", req.Id),
+			zap.Error(err),
+		)
+
+		return nil, err
+	}
+
+	objPayload := &pb.Payload{
+		Content: &pb.Payload_Object{
+			Object: <-objCh,
+		},
+	}
+	metaPayload := &pb.Payload{
+		Content: &pb.Payload_Metadata{
+			Metadata: <-metaCh,
+		},
+	}
+
+	return &pb.GetResponse{Payloads: []*pb.Payload{objPayload, metaPayload}}, nil
+}
+
+func (s *Service) getMetadata(ctx context.Context, req *pb.GetRequest) (*anypb.Any, error) {
+	metadata, err := s.docDB.Get(ctx, req.Id)
+	if err != nil {
+		zap.L().Error("unexpected error when getting metadata", zap.String("id", req.Id))
+		return nil, err
+	}
+
+	return marshalJSONToAny(metadata)
+}
+
+func (s *Service) getObject(ctx context.Context, req *pb.GetRequest) ([]byte, error) {
+	return s.objDB.Get(ctx, req.Id)
+}
+
+// UpdateIndex
+func (s *Service) UpdateIndex(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateResponse, error) {
+	g, gctx := errgroup.WithContext(ctx)
+
+	for _, payload := range req.Payloads {
+		switch x := payload.Content.(type) {
+		case *pb.Payload_Metadata:
+			g.Go(func() error {
+				err := s.updateMetadata(gctx, req.Id, x.Metadata)
+				if err != nil {
+					zap.L().Error(
+						"unexpected error when deleting metadata",
+						zap.String("id", req.Id),
+						zap.Error(err),
+					)
+				}
+				return err
+			})
+		case *pb.Payload_Object:
+			g.Go(func() error {
+				err := s.updateObject(gctx, req.Id, x.Object)
+				if err != nil {
+					zap.L().Error(
+						"unexpected error when deleting object",
+						zap.String("id", req.Id),
+						zap.Error(err),
+					)
+				}
+				return err
+			})
+		}
+	}
+
+	err := g.Wait()
+	if err != nil {
+		zap.L().Error(
+			"unexpected error while waiting for object/metadata to be deleted",
+			zap.String("id", req.Id),
+			zap.Error(err),
+		)
+
+		return nil, err
+	}
+
+	return new(pb.UpdateResponse), nil
+}
+
+func (s *Service) updateMetadata(ctx context.Context, id string, metadata *anypb.Any) error {
+	stats, err := s.docDB.Stat(ctx, id)
+	if err != nil {
+		zap.L().Error("unexpected error when stat-ing metadata", zap.String("id", id), zap.Error(err))
+		return err
+	}
+	if !stats.Exists {
+		zap.L().Error("metadata doesn't exist", zap.String("id", id))
+		return DocumentDoesNotExistErr{ID: id}
+	}
+
+	jsonMeta, err := unmarshalAnyToJSON(metadata)
+	if err != nil {
+		return err
+	}
+
+	zap.L().Info("updating metadata", zap.String("id", id))
+	return s.docDB.Upsert(ctx, id, jsonMeta)
+}
+
+func (s *Service) updateObject(ctx context.Context, id string, content []byte) error {
+	return s.objDB.Update(ctx, id, content)
+}
+
+// DeleteFromIndex
+func (s *Service) DeleteFromIndex(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteResponse, error) {
+	return new(pb.DeleteResponse), nil
 }
 
 func (s *Service) generateUUID(ctx context.Context) (string, error) {

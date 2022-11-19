@@ -7,66 +7,21 @@ option go_package = "./proto";
 import "google/protobuf/any.proto";
 
 service Sakuin {
-  rpc GetObject (GetObjectRequest) returns (GetObjectResponse);
-
-  rpc UpdateObject (UpdateObjectRequest) returns (UpdateObjectResponse);
-
-  rpc DeleteObject (DeleteObjectRequest) returns (DeleteObjectResponse);
-
-  rpc GetMetadata (GetMetadataRequest) returns (GetMetadataResponse);
-
-  rpc UpdateMetadata (UpdateMetadataRequest) returns (UpdateMetadataResponse);
-
-  rpc DeleteMetadata (DeleteMetadataRequest) returns (DeleteMetadataResponse);
-
   rpc Index (IndexRequest) returns (IndexResponse);
+
+  rpc GetFromIndex (GetRequest) returns (GetResponse);
+
+  rpc UpdateIndex (UpdateRequest) returns (UpdateResponse);
+
+  rpc DeleteFromIndex (DeleteRequest) returns (DeleteResponse);
 }
 
-message GetObjectRequest {
-  string id = 1;
+message Payload {
+  oneof content {
+    bytes object = 1;
+    google.protobuf.Any metadata = 2;
+  }
 }
-
-message GetObjectResponse {
-  bytes content = 1;
-}
-
-message UpdateObjectRequest {
-  string id = 1;
-  bytes content = 2;
-}
-
-message UpdateObjectResponse {}
-
-message DeleteObjectRequest {
-  string id = 1;
-}
-
-message DeleteObjectResponse {}
-
-message GetMetadataRequest {
-  string id = 1;
-}
-
-message JSONMetadata {
-  bytes json = 1;
-}
-
-message GetMetadataResponse {
-  google.protobuf.Any metadata = 1;
-}
-
-message UpdateMetadataRequest {
-  string id = 1;
-  google.protobuf.Any metadata = 2;
-}
-
-message UpdateMetadataResponse {}
-
-message DeleteMetadataRequest {
-  string id = 1;
-}
-
-message DeleteMetadataResponse {}
 
 message IndexRequest {
   google.protobuf.Any metadata = 1;
@@ -75,4 +30,30 @@ message IndexRequest {
 
 message IndexResponse {
   string id = 1;
+}
+
+message GetRequest {
+  string id = 1;
+}
+
+message GetResponse {
+  repeated Payload payloads = 1;
+}
+
+message UpdateRequest {
+  string id = 1;
+
+  repeated Payload payloads = 2;
+}
+
+message UpdateResponse {}
+
+message DeleteRequest {
+  string id = 1;
+}
+
+message DeleteResponse {}
+
+message JSONMetadata {
+  bytes json = 1;
 }
